@@ -1,55 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { Doughnut } from 'react-chartjs-2';
-import { Chart, ArcElement } from 'chart.js';
+import { Chart, ArcElement, Tooltip } from 'chart.js';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 
-Chart.register(ArcElement);
+
+Chart.register(ArcElement, Tooltip);
 
 interface Todo {
   id: number;
   text: string;
   completed: boolean;
   hidden: boolean;
+  category: 'okul' | 'iş' | 'eğlence';
+  date: Date | null; // Göreve atanacak tarih
 }
 
 const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [newTodo, setNewTodo] = useState<string>(''); 
+  const [newTodo, setNewTodo] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<'okul' | 'iş' | 'eğlence'>('okul');
   const [showHiddenTodos, setShowHiddenTodos] = useState<boolean>(false);
+  const [idCounter, setIdCounter] = useState(0);
 
-  // Load todos from localStorage when the app starts
-  useEffect(() => {
-    const storedTodos = localStorage.getItem('todos');
-    if (storedTodos) {
-      try {
-        const parsedTodos = JSON.parse(storedTodos);
-        console.log('Loaded todos:', parsedTodos);
-        setTodos(parsedTodos);
-      } catch (error) {
-        console.error('Error parsing todos from localStorage', error);
-        localStorage.removeItem('todos'); // Remove corrupted data from localStorage
-      }
-    }
-  }, []); // Runs only once, on initial load
-
-  // Update localStorage every time todos change
-  useEffect(() => {
-    console.log('Saving todos to localStorage:', todos);
-    localStorage.setItem('todos', JSON.stringify(todos));
-  }, [todos]); // Runs every time todos array is updated
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const handleAddTodo = () => {
     if (newTodo.trim()) {
       const newTask: Todo = {
-        id: Date.now(),
+        id: idCounter,
         text: newTodo,
         completed: false,
         hidden: false,
+        category: selectedCategory,
+        date: selectedDate, // Seçilen tarih ekleniyor
       };
       setTodos([...todos, newTask]);
-      setNewTodo(''); // Clear the input field
+      setNewTodo('');
+      setIdCounter(idCounter + 1);
+      setSelectedDate(null); // Tarih seçiciyi sıfırlayın
     }
   };
-
   const handleToggleComplete = (id: number) => {
     setTodos(
       todos.map(todo =>
@@ -59,25 +50,78 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTodo = (id: number) => {
-    setTodos(todos.filter(todo => todo.id !== id)); // Remove task from state
+    setTodos(todos.filter(todo => todo.id !== id));
   };
 
   const toggleShowHiddenTodos = () => {
-    setShowHiddenTodos(!showHiddenTodos); // Toggle the visibility of completed tasks
+    setShowHiddenTodos(!showHiddenTodos);
   };
 
   const completedTasks = todos.filter(todo => todo.completed).length;
   const totalTasks = todos.length;
 
+  useEffect(() => {
+    const savedTodos = localStorage.getItem("savedTodos");
+    if (savedTodos) {
+      try {
+        const parsedTodos: Todo[] = JSON.parse(savedTodos);
+        setTodos(parsedTodos);
+        setIdCounter(
+          parsedTodos.length > 0
+            ? Math.max(...parsedTodos.map((comp) => comp.id)) + 1
+            : 1 // Başlangıç ID değeri 1 olarak ayarlandı
+        );
+      } catch (error) {
+        console.error("Error parsing saved todos:", error);
+        setTodos([]); // Hata durumunda boş array ile başlatıyoruz
+      }
+    }
+  }, []);
+  
+  useEffect(() => {
+    localStorage.setItem("savedTodos", JSON.stringify(todos));
+  }, [todos]);
+
   const chartData = {
-    labels: ['Completed', 'Remaining'],
+    labels: todos.map(todo => todo.text),
     datasets: [
       {
-        data: [completedTasks, totalTasks - completedTasks],
-        backgroundColor: ['#4CAF50', '#ddd'],
-        hoverBackgroundColor: ['#66BB6A', '#ccc'],
+        data: todos.map(todo => 1),
+        backgroundColor: todos.map(todo => {
+          const baseColor = todo.completed ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)';
+          switch (todo.category) {
+            case 'okul': return todo.completed ? '#4CAF50' : '#FFCDD2';
+            case 'iş': return todo.completed ? '#FF9800' : '#FFE0B2';
+            case 'eğlence': return todo.completed ? '#2196F3' : '#BBDEFB';
+            default: return baseColor;
+          }
+        }),
+        hoverBackgroundColor: todos.map(todo => {
+          const baseColor = todo.completed ? 'rgba(76, 175, 80, 0.9)' : 'rgba(244, 67, 54, 0.9)';
+          switch (todo.category) {
+            case 'okul': return todo.completed ? '#66BB6A' : '#FFEBEE';
+            case 'iş': return todo.completed ? '#FFB74D' : '#FFF3E0';
+            case 'eğlence': return todo.completed ? '#64B5F6' : '#E3F2FD';
+            default: return baseColor;
+          }
+        }),
       },
     ],
+  };
+
+  const chartOptions = {
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function (context: any) {
+            const todo = todos[context.dataIndex];
+            const status = todo.completed ? 'Tamamlandı' : 'Tamamlanmadı';
+            return `${todo.text} - ${status} (${todo.category})`;
+          },
+        },
+      },
+    },
+    maintainAspectRatio: false,
   };
 
   return (
@@ -91,6 +135,18 @@ const App: React.FC = () => {
           placeholder="Add a new task"
           style={styles.input}
         />
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value as 'okul' | 'iş' | 'eğlence')}
+          style={styles.select}
+        >
+          <option value="okul">Okul</option>
+          <option value="iş">İş</option>
+          <option value="eğlence">Eğlence</option>
+        </select>
+        <div style={styles.calendarContainer}>
+          <Calendar onChange={setSelectedDate} value={selectedDate} />
+        </div>
         <button onClick={handleAddTodo} style={styles.addButton}>Add</button>
         <button onClick={toggleShowHiddenTodos} style={styles.toggleButton}>
           {showHiddenTodos ? 'Hide Completed Tasks' : 'Show Completed Tasks'}
@@ -112,11 +168,8 @@ const App: React.FC = () => {
                   onChange={() => handleToggleComplete(todo.id)}
                   style={styles.checkbox}
                 />
-                <span
-                  onClick={() => handleToggleComplete(todo.id)}
-                  style={styles.todoText}
-                >
-                  {todo.text}
+                <span onClick={() => handleToggleComplete(todo.id)} style={styles.todoText}>
+                  {todo.text} ({todo.category}) {todo.date ? `- ${todo.date.toLocaleDateString()}` : ''}
                 </span>
                 <button onClick={() => handleDeleteTodo(todo.id)} style={styles.deleteButton}>Delete</button>
               </li>
@@ -125,7 +178,9 @@ const App: React.FC = () => {
       </div>
       <div style={styles.rightPanel}>
         <h2>Task Completion</h2>
-        <Doughnut data={chartData} />
+        <div style={{ width: '200px', height: '200px' }}>
+          <Doughnut data={chartData} options={chartOptions} />
+        </div>
         <p>
           {completedTasks} of {totalTasks} tasks completed
         </p>
@@ -149,6 +204,9 @@ const styles = {
     paddingRight: '20px',
     borderRight: '1px solid #ddd',
   },
+  calendarContainer: {
+    marginBottom: '10px',
+  },
   title: {
     color: '#333333',
   },
@@ -159,6 +217,13 @@ const styles = {
     borderRadius: '4px',
     border: '1px solid #ddd',
     outline: 'none',
+  },
+  select: {
+    width: '100%',
+    padding: '10px',
+    marginBottom: '10px',
+    borderRadius: '4px',
+    border: '1px solid #ddd',
   },
   addButton: {
     padding: '10px 15px',
@@ -208,9 +273,7 @@ const styles = {
     cursor: 'pointer',
   },
   rightPanel: {
-    flex: 1,
     paddingLeft: '20px',
-    textAlign: 'center' as 'center',
   },
 };
 
