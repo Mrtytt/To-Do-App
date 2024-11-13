@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart, ArcElement, Tooltip } from 'chart.js';
 import Calendar from 'react-calendar';
+import TimePicker from 'react-time-picker'; // Saat seçici eklendi
 import 'react-calendar/dist/Calendar.css';
+import 'react-time-picker/dist/TimePicker.css';
+import localforage from 'localforage';
 
 
 Chart.register(ArcElement, Tooltip);
@@ -14,6 +17,7 @@ interface Todo {
   hidden: boolean;
   category: 'okul' | 'iş' | 'eğlence';
   date: Date | null; // Göreve atanacak tarih
+  time: string | null; // Göreve atanacak saat
 }
 
 const App: React.FC = () => {
@@ -24,6 +28,7 @@ const App: React.FC = () => {
   const [idCounter, setIdCounter] = useState(0);
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null); // Saat ekleme
 
   const handleAddTodo = () => {
     if (newTodo.trim()) {
@@ -33,12 +38,14 @@ const App: React.FC = () => {
         completed: false,
         hidden: false,
         category: selectedCategory,
-        date: selectedDate, // Seçilen tarih ekleniyor
+        date: selectedDate,
+        time: selectedTime, // Saat seçimi
       };
       setTodos([...todos, newTask]);
       setNewTodo('');
       setIdCounter(idCounter + 1);
-      setSelectedDate(null); // Tarih seçiciyi sıfırlayın
+      setSelectedDate(null);
+      setSelectedTime(null); // Saat seçiciyi sıfırlayın
     }
   };
   const handleToggleComplete = (id: number) => {
@@ -61,25 +68,16 @@ const App: React.FC = () => {
   const totalTasks = todos.length;
 
   useEffect(() => {
-    const savedTodos = localStorage.getItem("savedTodos");
-    if (savedTodos) {
-      try {
-        const parsedTodos: Todo[] = JSON.parse(savedTodos);
-        setTodos(parsedTodos);
-        setIdCounter(
-          parsedTodos.length > 0
-            ? Math.max(...parsedTodos.map((comp) => comp.id)) + 1
-            : 1 // Başlangıç ID değeri 1 olarak ayarlandı
-        );
-      } catch (error) {
-        console.error("Error parsing saved todos:", error);
-        setTodos([]); // Hata durumunda boş array ile başlatıyoruz
+    localforage.getItem<Todo[]>("savedTodos").then((savedTodos) => {
+      if (savedTodos) {
+        setTodos(savedTodos);
+        setIdCounter(savedTodos.length > 0 ? Math.max(...savedTodos.map((todo) => todo.id)) + 1 : 1);
       }
-    }
+    });
   }, []);
   
   useEffect(() => {
-    localStorage.setItem("savedTodos", JSON.stringify(todos));
+    localforage.setItem("savedTodos", todos);
   }, [todos]);
 
   const chartData = {
@@ -145,7 +143,16 @@ const App: React.FC = () => {
           <option value="eğlence">Eğlence</option>
         </select>
         <div style={styles.calendarContainer}>
-          <Calendar onChange={setSelectedDate} value={selectedDate} />
+          <Calendar onChange={setSelectedDate} value={selectedDate} style={{ width: '100px', height: '150px' }} />
+        </div>
+        <div style={styles.calendarContainer}>
+          <TimePicker
+            onChange={setSelectedTime}
+            value={selectedTime}
+            disableClock={true}
+            clearIcon={null}
+            format="HH:mm"
+          />        
         </div>
         <button onClick={handleAddTodo} style={styles.addButton}>Add</button>
         <button onClick={toggleShowHiddenTodos} style={styles.toggleButton}>
